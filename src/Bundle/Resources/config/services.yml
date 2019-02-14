@@ -1,0 +1,23 @@
+services:
+    dunglas_doctrine_json_odm.serializer:
+        class: Symfony\Component\Serializer\Serializer
+        public: true
+        arguments:
+            - ['@dunglas_doctrine_json_odm.normalizer.object']
+            - ['@serializer.encoder.json']
+
+    dunglas_doctrine_json_odm.normalizer.object:
+        class: Dunglas\DoctrineJsonOdm\Normalizer\ObjectNormalizer
+        public: false
+        arguments:
+            - '@dunglas_doctrine_json_odm.normalizer.raw_object'
+
+    dunglas_doctrine_json_odm.normalizer.raw_object:
+        class: Symfony\Component\Serializer\Normalizer\ObjectNormalizer
+        public: false
+        arguments:
+            - '@?serializer.mapping.class_metadata_factory'
+            - '@?'
+            - '@serializer.property_accessor'
+            - '@?property_info'
+            - '@?serializer.mapping.class_discriminator_resolver'

@@ -41,10 +41,22 @@ final class ObjectNormalizer implements NormalizerInterface, DenormalizerInterfa
 
     /**
      * {@inheritdoc}
+     * @throws \ReflectionException
      */
     public function normalize($object, $format = null, array $context = [])
     {
-        return array_merge(['#type' => ClassUtils::getClass($object)], $this->objectNormalizer->normalize($object, $format, $context));
+        $reflectionClass = new \ReflectionClass($object);
+
+        $data = [];
+        foreach ($reflectionClass->getProperties() as $property) {
+            if (!$property->isPublic()) {
+                continue;
+            }
+
+            $data[$property->getName()] = $this->getNormalizedValue($object->{$property->getName()}, $format, $context);
+        }
+
+        return $this->associateTypeWithData($object, $data);
     }
 
     /**
@@ -57,10 +69,11 @@ final class ObjectNormalizer implements NormalizerInterface, DenormalizerInterfa
 
     /**
      * {@inheritdoc}
+     * @throws \ReflectionException
      */
     public function denormalize($data, $class, $format = null, array $context = [])
     {
-        if (is_object($data)) {
+        if (\is_object($data)) {
             return $data;
         }
 
@@ -69,14 +82,28 @@ final class ObjectNormalizer implements NormalizerInterface, DenormalizerInterfa
             unset($data['#type']);
 
             $data = $this->denormalize($data, $type, $format, $context);
-            $data = $this->objectNormalizer->denormalize($data, $type, $format, $context);
 
-            return $data;
+            if (!\class_exists($type)) {
+                return $data;
+            }
+
+            $reflectionClass = new \ReflectionClass($type);
+            $object = $reflectionClass->newInstance();
+
+            foreach ($data as $propertyName => $propertyValue) {
+                if ($reflectionClass->hasProperty($propertyName)) {
+                    $reflectionProperty = new \ReflectionProperty($type, $propertyName);
+                    $reflectionProperty->setAccessible(true);
+                    $reflectionProperty->setValue($object, $propertyValue);
+                }
+            }
+
+            return $object;
         }
 
-        if (is_array($data) || $data instanceof \Traversable) {
+        if (\is_array($data) || $data instanceof \Traversable) {
             foreach ($data as $key => $value) {
-                $data[$key] = $this->serializer->denormalize($value, $class, $format, $context);
+                $data[$key] = $this->serializer->denormalize($value, $value['#type'] ?? $class, $format, $context);
             }
         }
 
@@ -107,5 +134,36 @@ final class ObjectNormalizer implements NormalizerInterface, DenormalizerInterfa
         if ($this->objectNormalizer instanceof SerializerAwareInterface) {
             $this->objectNormalizer->setSerializer($serializer);
         }
+    }
+
+    /**
+     * @param mixed $object
+     * @param mixed $data
+     * @return array
+     */
+    private function associateTypeWithData($object, $data)
+    {
+        return \array_merge(['#type' => ClassUtils::getClass($object)], $data);
+    }
+
+    /**
+     * @param mixed $value
+     * @param string|null $format
+     * @param array $context
+     * @return mixed
+     */
+    private function getNormalizedValue($value, string $format = null, array $context = [])
+    {
+        if (\is_object($value)) {
+            return $this->associateTypeWithData($value, $this->serializer->normalize($value, $format, $context));
+        }
+
+        if (\is_array($value) || $value instanceof \Traversable) {
+            return \array_map(function($item) use ($format, $context) {
+                return $this->getNormalizedValue($item, $format, $context);
+            }, $value);
+        }
+
+        return $value;
     }
 }

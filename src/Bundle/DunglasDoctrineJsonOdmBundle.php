@@ -10,7 +10,9 @@
 namespace Dunglas\DoctrineJsonOdm\Bundle;
 
 use Doctrine\DBAL\Types\Type;
+use Dunglas\DoctrineJsonOdm\Bundle\DependencyInjection\SerializerPass;
 use Dunglas\DoctrineJsonOdm\Type\JsonDocumentType;
+use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\HttpKernel\Bundle\Bundle;
 
 /**
@@ -34,5 +36,15 @@ final class DunglasDoctrineJsonOdmBundle extends Bundle
     {
         $type = Type::getType('json_document');
         $type->setSerializer($this->container->get('dunglas_doctrine_json_odm.serializer'));
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function build(ContainerBuilder $container)
+    {
+        parent::build($container);
+
+        $container->addCompilerPass(new SerializerPass());
     }
 }
